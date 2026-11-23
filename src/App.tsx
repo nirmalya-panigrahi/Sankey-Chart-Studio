@@ -10,8 +10,10 @@ import {
   Redo2,
   SlidersHorizontal,
   Table2,
+  TrendingUp,
   Undo2,
 } from 'lucide-react';
+import { computeAreaBumpLayout } from './areaBumpMath';
 import { computeChordLayout } from './chordMath';
 import { BulkPasteModal } from './components/BulkPasteModal';
 import { DataInputTab } from './components/DataInputTab';
@@ -20,7 +22,7 @@ import { PalettesTab } from './components/PalettesTab';
 import { SlidePreviewCanvas } from './components/SlidePreviewCanvas';
 import { exportSankeyToPng, exportSankeyToSvg } from './exportUtils';
 import { EXECUTIVE_PALETTES, SAMPLE_DATASETS } from './palettes';
-import { exportChordToPptx, exportSankeyToPptx } from './pptxExporter';
+import { exportAreaBumpToPptx, exportChordToPptx, exportSankeyToPptx } from './pptxExporter';
 import { computeSankeyLayout } from './sankeyMath';
 import { AspectRatio, ChartType, FlowRow, SankeyDocumentState, SankeyStyleConfig } from './types';
 import { useHistoryManager } from './useHistoryManager';
@@ -65,6 +67,9 @@ function createInitialDocumentState(): SankeyDocumentState {
       chordRingThickness: 18,
       chordPadAngle: 4,
       chordDirected: true,
+      bumpSpacing: 10,
+      bumpNormalize: false,
+      bumpShowLeftLabels: true,
     },
   };
 }
@@ -120,12 +125,31 @@ export default function App() {
     [rows, aspectRatio, style, activeColors, nodeColorOverrides]
   );
 
+  const areaBumpLayout = useMemo(
+    () => computeAreaBumpLayout(rows, aspectRatio, style, activeColors, nodeColorOverrides),
+    [rows, aspectRatio, style, activeColors, nodeColorOverrides]
+  );
+
   const activeDiagnostic =
-    chartType === 'sankey' ? sankeyLayout.diagnostic : chordLayout.diagnostic;
+    chartType === 'sankey'
+      ? sankeyLayout.diagnostic
+      : chartType === 'chord'
+      ? chordLayout.diagnostic
+      : areaBumpLayout.diagnostic;
+
   const activeNodeEntries =
-    chartType === 'sankey' ? sankeyLayout.nodes : chordLayout.groups;
+    chartType === 'sankey'
+      ? sankeyLayout.nodes
+      : chartType === 'chord'
+      ? chordLayout.groups
+      : areaBumpLayout.series;
+
   const activeTotalFlow =
-    chartType === 'sankey' ? sankeyLayout.totalRootInflow : chordLayout.totalFlow;
+    chartType === 'sankey'
+      ? sankeyLayout.totalRootInflow
+      : chartType === 'chord'
+      ? chordLayout.totalFlow
+      : areaBumpLayout.totalLatestFlow;
 
   const flashStatus = useCallback((msg: string) => {
     setExportStatus(msg);
@@ -136,9 +160,14 @@ export default function App() {
 
   const handleSetChartType = useCallback(
     (nextType: ChartType) => {
+      const labelMap: Record<ChartType, string> = {
+        sankey: 'Sankey',
+        chord: 'Chord',
+        'area-bump': 'Area Bump',
+      };
       commit(
         (prev) => (prev.chartType === nextType ? prev : { ...prev, chartType: nextType }),
-        { label: `Switch to ${nextType === 'chord' ? 'Chord' : 'Sankey'} chart` }
+        { label: `Switch to ${labelMap[nextType]} chart` }
       );
     },
     [commit]
@@ -391,6 +420,7 @@ export default function App() {
         'subtitle',
         'chordRingThickness',
         'chordPadAngle',
+        'bumpSpacing',
       ]);
       const patchKeys = Object.keys(patch).sort();
       const isContinuous = patchKeys.every((k) => continuousKeys.has(k));
@@ -418,6 +448,8 @@ export default function App() {
     try {
       if (chartType === 'chord') {
         await exportChordToPptx(chordLayout, aspectRatio, style);
+      } else if (chartType === 'area-bump') {
+        await exportAreaBumpToPptx(areaBumpLayout, aspectRatio, style);
       } else {
         await exportSankeyToPptx(sankeyLayout, aspectRatio, style);
       }
@@ -567,19 +599,16 @@ export default function App() {
         {/* Left Sidebar (380px width, scrollable) */}
         <aside className="flex w-full shrink-0 flex-col border-b border-slate-200 bg-white lg:w-[380px] lg:border-b-0 lg:border-r lg:overflow-hidden">
           {/* Diagram Type Switcher */}
-          <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-2.5">
-            <span className="text-xs font-medium text-slate-700 whitespace-nowrap">
-              Chart Type
-            </span>
+          <div className="border-b border-slate-200 px-3 py-2.5">
             <div
               role="group"
               aria-label="Chart type"
-              className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-0.5"
+              className="grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1"
             >
               <button
                 type="button"
                 onClick={() => handleSetChartType('sankey')}
-                className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                className={`inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
                   chartType === 'sankey'
                     ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -591,7 +620,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => handleSetChartType('chord')}
-                className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                className={`inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
                   chartType === 'chord'
                     ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -599,6 +628,18 @@ export default function App() {
               >
                 <CircleDot className="h-3.5 w-3.5" />
                 Chord
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetChartType('area-bump')}
+                className={`inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                  chartType === 'area-bump'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <TrendingUp className="h-3.5 w-3.5" />
+                Area Bump
               </button>
             </div>
           </div>
@@ -682,6 +723,7 @@ export default function App() {
           <div className="flex-1 overflow-y-auto p-4">
             {activeTab === 'data' && (
               <DataInputTab
+                chartType={chartType}
                 rows={rows}
                 diagnostic={activeDiagnostic}
                 totalRootInflow={activeTotalFlow}
@@ -731,6 +773,7 @@ export default function App() {
             chartType={chartType}
             sankeyLayout={sankeyLayout}
             chordLayout={chordLayout}
+            areaBumpLayout={areaBumpLayout}
             aspectRatio={aspectRatio}
             style={style}
             selectedNodeName={selectedNodeName}

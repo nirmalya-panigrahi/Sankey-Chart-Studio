@@ -7,7 +7,7 @@ export interface FlowRow {
 
 export type AspectRatio = '16:9' | '4:3';
 
-export type ChartType = 'sankey' | 'chord';
+export type ChartType = 'sankey' | 'chord' | 'area-bump';
 
 export type LinkColorMode = 'source' | 'target' | 'neutral';
 
@@ -36,6 +36,9 @@ export interface SankeyStyleConfig {
   chordRingThickness: number;
   chordPadAngle: number;
   chordDirected: boolean;
+  bumpSpacing: number;
+  bumpNormalize: boolean;
+  bumpShowLeftLabels: boolean;
 }
 
 export interface ComputedSankeyNode {
@@ -94,6 +97,39 @@ export interface ComputedChordRibbon {
   color: string;
 }
 
+export interface ComputedAreaBumpPoint {
+  period: string;
+  periodIndex: number;
+  x: number;
+  yTop: number;
+  yBot: number;
+  yMid: number;
+  value: number;
+  share: number;
+  rank: number | null;
+}
+
+export interface ComputedAreaBumpSeries {
+  index: number;
+  name: string;
+  color: string;
+  points: ComputedAreaBumpPoint[];
+  firstActiveIndex: number;
+  lastActiveIndex: number;
+  latestValue: number;
+  latestShare: number;
+  latestRank: number;
+  firstRank: number;
+  avgRank: number;
+}
+
+export interface ComputedAreaBumpPeriod {
+  name: string;
+  index: number;
+  x: number;
+  totalValue: number;
+}
+
 export interface DataDiagnostic {
   type: 'cycle' | 'self-loop' | 'invalid-value' | 'empty';
   message: string;
@@ -118,6 +154,19 @@ export interface ChordLayoutResult {
   innerRadius: number;
   outerRadius: number;
   totalFlow: number;
+  canvasWidth: number;
+  canvasHeight: number;
+  diagnostic: DataDiagnostic | null;
+}
+
+export interface AreaBumpLayoutResult {
+  series: ComputedAreaBumpSeries[];
+  periods: ComputedAreaBumpPeriod[];
+  plotTop: number;
+  plotBottom: number;
+  plotLeft: number;
+  plotRight: number;
+  totalLatestFlow: number;
   canvasWidth: number;
   canvasHeight: number;
   diagnostic: DataDiagnostic | null;

@@ -16,6 +16,175 @@
   <body class="bg-[#F4F5F7] text-slate-900 antialiased selection:bg-slate-900 selection:text-white">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <footer class="csf" aria-label="Chart studio tools">
+      <style>
+        .csf {
+          --csf-bg: #FFFAF5;
+          --csf-ink: #3A3454;
+          --csf-border: #3A3454;
+          --csf-waffle-bg: #FFDCCB;
+          --csf-waffle-dot: #D9694A;
+          --csf-bars-bg: #CFEBDD;
+          --csf-bars-dot: #3B9576;
+          --csf-sankey-bg: #DDD5F3;
+          --csf-sankey-dot: #7260B6;
+          --csf-all-bg: #EFEBF5;
+
+          background: var(--csf-bg);
+          color: var(--csf-ink);
+          border-top: 1.5px solid var(--csf-border);
+          font-family: Figtree, system-ui, -apple-system, sans-serif;
+          padding: 24px 16px calc(28px + env(safe-area-inset-bottom, 0px));
+          text-align: center;
+        }
+        .csf,
+        .csf *,
+        .csf *::before,
+        .csf *::after {
+          box-sizing: border-box;
+        }
+        .csf .csf-inner {
+          max-width: 820px;
+          margin: 0 auto;
+        }
+        .csf .csf-label {
+          margin: 0 0 14px;
+          font-size: 14px;
+          font-weight: 500;
+          line-height: 1.4;
+          color: var(--csf-ink);
+        }
+        .csf .csf-links {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          align-items: center;
+          gap: 10px;
+        }
+        .csf .csf-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 7px 15px;
+          border: 1.5px solid var(--csf-border);
+          border-radius: 9999px;
+          background: transparent;
+          color: var(--csf-ink);
+          font-size: 14px;
+          font-weight: 500;
+          line-height: 1.25;
+          text-decoration: none;
+          transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), background-color 180ms ease;
+        }
+        .csf .csf-link:hover {
+          transform: translateY(-2px);
+        }
+        .csf .csf-link:focus-visible {
+          outline: 2.5px solid var(--csf-ink);
+          outline-offset: 3px;
+        }
+        .csf .csf-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 9999px;
+          flex-shrink: 0;
+        }
+        .csf .csf-waffle .csf-dot {
+          background: var(--csf-waffle-dot);
+        }
+        .csf .csf-bars .csf-dot {
+          background: var(--csf-bars-dot);
+        }
+        .csf .csf-sankey .csf-dot {
+          background: var(--csf-sankey-dot);
+        }
+        .csf .csf-waffle:hover,
+        .csf .csf-waffle[aria-current="page"] {
+          background: var(--csf-waffle-bg);
+        }
+        .csf .csf-bars:hover,
+        .csf .csf-bars[aria-current="page"] {
+          background: var(--csf-bars-bg);
+        }
+        .csf .csf-sankey:hover,
+        .csf .csf-sankey[aria-current="page"] {
+          background: var(--csf-sankey-bg);
+        }
+        .csf .csf-all:hover,
+        .csf .csf-all[aria-current="page"] {
+          background: var(--csf-all-bg);
+        }
+        .csf .csf-link[aria-current="page"] {
+          pointer-events: none;
+          cursor: default;
+          transform: none;
+        }
+
+        @media (prefers-color-scheme: dark) {
+          .csf {
+            --csf-bg: #1F1C2B;
+            --csf-ink: #F3EEF9;
+            --csf-border: rgba(243, 238, 249, 0.38);
+            --csf-waffle-bg: #4B2E27;
+            --csf-waffle-dot: #FFAC8A;
+            --csf-bars-bg: #244237;
+            --csf-bars-dot: #86DFB9;
+            --csf-sankey-bg: #373054;
+            --csf-sankey-dot: #C4B5FD;
+            --csf-all-bg: #2E2A3F;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .csf .csf-link {
+            transition: none;
+          }
+          .csf .csf-link:hover {
+            transform: none;
+          }
+        }
+      </style>
+
+      <div class="csf-inner">
+        <p class="csf-label">More chart makers from the studio</p>
+        <nav class="csf-links" aria-label="Studio chart makers">
+          <a class="csf-link csf-waffle" href="https://nirmalya-panigrahi.github.io/Waffle-Chart-Studio/">
+            <span class="csf-dot" aria-hidden="true"></span>
+            <span>Waffle Chart Studio</span>
+          </a>
+          <a class="csf-link csf-bars" href="https://nirmalya-panigrahi.github.io/Exec-Bar-Charts/">
+            <span class="csf-dot" aria-hidden="true"></span>
+            <span>Exec Bar Charts</span>
+          </a>
+          <a class="csf-link csf-sankey" href="https://nirmalya-panigrahi.github.io/Sankey-Chart-Studio/">
+            <span class="csf-dot" aria-hidden="true"></span>
+            <span>Sankey Chart Studio</span>
+          </a>
+          <a class="csf-link csf-all" href="https://executive-charts.ai.studio/">
+            <span>All chart makers &rarr;</span>
+          </a>
+        </nav>
+      </div>
+
+      <script>
+        (function () {
+          var norm = function (p) {
+            return p.replace(/\/index\.html$/i, '').replace(/\/+$/, '') || '/';
+          };
+          var here = norm(location.pathname);
+          var links = document.querySelectorAll('.csf a.csf-link');
+          for (var i = 0; i < links.length; i++) {
+            var link = links[i];
+            if (norm(link.pathname) === here) {
+              link.setAttribute('aria-current', 'page');
+              link.setAttribute('tabindex', '-1');
+              link.addEventListener('click', function (e) { e.preventDefault(); });
+            }
+          }
+        })();
+      </script>
+    </footer>
   </body>
 </html>
 

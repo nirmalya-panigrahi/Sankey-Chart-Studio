@@ -2,9 +2,10 @@ import React from 'react';
 import { AlertTriangle, FileSpreadsheet, Plus, Trash2 } from 'lucide-react';
 import { SAMPLE_DATASETS } from '../palettes';
 import { formatSankeyValue } from '../sankeyMath';
-import { DataDiagnostic, FlowRow, NumberFormat } from '../types';
+import { ChartType, DataDiagnostic, FlowRow, NumberFormat } from '../types';
 
 interface DataInputTabProps {
+  chartType: ChartType;
   rows: FlowRow[];
   diagnostic: DataDiagnostic | null;
   totalRootInflow: number;
@@ -18,6 +19,7 @@ interface DataInputTabProps {
 }
 
 export const DataInputTab: React.FC<DataInputTabProps> = ({
+  chartType,
   rows,
   diagnostic,
   totalRootInflow,
@@ -30,6 +32,8 @@ export const DataInputTab: React.FC<DataInputTabProps> = ({
   onLoadSample,
 }) => {
   const offendingSet = new Set(diagnostic?.offendingRowIds || []);
+  const col1Label = chartType === 'area-bump' ? 'Series' : 'Source';
+  const col2Label = chartType === 'area-bump' ? 'Period' : 'Target';
 
   return (
     <div className="flex flex-col gap-4">
@@ -96,8 +100,8 @@ export const DataInputTab: React.FC<DataInputTabProps> = ({
       {/* Interactive Flow Table */}
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
         <div className="grid grid-cols-[1fr_1fr_84px_30px] items-center gap-1.5 border-b border-slate-200 bg-slate-50/90 px-2.5 py-2 text-[11px] font-semibold text-slate-600">
-          <span>Source</span>
-          <span>Target</span>
+          <span>{col1Label}</span>
+          <span>{col2Label}</span>
           <span className="text-right">Value</span>
           <span className="sr-only">Delete</span>
         </div>
@@ -111,7 +115,7 @@ export const DataInputTab: React.FC<DataInputTabProps> = ({
               className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 whitespace-nowrap"
             >
               <Plus className="h-3.5 w-3.5" />
-              Add First Flow
+              Add First Row
             </button>
           </div>
         ) : (
@@ -135,8 +139,8 @@ export const DataInputTab: React.FC<DataInputTabProps> = ({
                     type="text"
                     value={row.source}
                     onChange={(e) => onUpdateRow(row.id, { source: e.target.value })}
-                    placeholder="Source"
-                    aria-label="Source node"
+                    placeholder={col1Label}
+                    aria-label={col1Label}
                     className={`min-w-0 rounded border px-2 py-1 text-xs outline-none transition-colors ${
                       isOffending && offendingSet.has(row.id)
                         ? 'border-red-300 bg-white text-red-950 focus:border-red-500'
@@ -147,8 +151,8 @@ export const DataInputTab: React.FC<DataInputTabProps> = ({
                     type="text"
                     value={row.target}
                     onChange={(e) => onUpdateRow(row.id, { target: e.target.value })}
-                    placeholder="Target"
-                    aria-label="Target node"
+                    placeholder={col2Label}
+                    aria-label={col2Label}
                     className={`min-w-0 rounded border px-2 py-1 text-xs outline-none transition-colors ${
                       isOffending && offendingSet.has(row.id)
                         ? 'border-red-300 bg-white text-red-950 focus:border-red-500'
@@ -195,13 +199,15 @@ export const DataInputTab: React.FC<DataInputTabProps> = ({
           className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 transition-colors hover:bg-slate-50 whitespace-nowrap shrink-0"
         >
           <Plus className="h-3.5 w-3.5" />
-          Add Flow Row
+          Add Row
         </button>
 
         <div className="flex items-center gap-1.5 text-[11px] text-slate-500 tabular-nums truncate">
-          <span>{rows.length} flows</span>
+          <span>{rows.length} rows</span>
           <span aria-hidden="true">·</span>
-          <span>{nodeCount} nodes</span>
+          <span>
+            {nodeCount} {chartType === 'area-bump' ? 'series' : 'nodes'}
+          </span>
           {totalRootInflow > 0 && (
             <>
               <span aria-hidden="true">·</span>

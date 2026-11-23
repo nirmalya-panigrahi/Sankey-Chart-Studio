@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { AlertTriangle, RotateCcw, X } from 'lucide-react';
+import { buildAreaBumpSvgPath } from '../areaBumpMath';
 import { buildChordGroupSvgPath, buildChordRibbonSvgPath } from '../chordMath';
 import { buildRibbonSvgPath, formatSankeyValue } from '../sankeyMath';
 import {
+  AreaBumpLayoutResult,
   AspectRatio,
   ChartType,
   ChordLayoutResult,
+  ComputedAreaBumpSeries,
   ComputedChordGroup,
   ComputedChordRibbon,
   ComputedSankeyLink,
@@ -19,6 +22,7 @@ interface SlidePreviewCanvasProps {
   chartType: ChartType;
   sankeyLayout: SankeyLayoutResult;
   chordLayout: ChordLayoutResult;
+  areaBumpLayout: AreaBumpLayoutResult;
   aspectRatio: AspectRatio;
   style: SankeyStyleConfig;
   selectedNodeName: string | null;
@@ -34,6 +38,7 @@ export const SlidePreviewCanvas: React.FC<SlidePreviewCanvasProps> = ({
   chartType,
   sankeyLayout,
   chordLayout,
+  areaBumpLayout,
   aspectRatio,
   style,
   selectedNodeName,
@@ -49,18 +54,39 @@ export const SlidePreviewCanvas: React.FC<SlidePreviewCanvasProps> = ({
   const [editingHeader, setEditingHeader] = useState(false);
 
   const activeDiagnostic =
-    chartType === 'sankey' ? sankeyLayout.diagnostic : chordLayout.diagnostic;
+    chartType === 'sankey'
+      ? sankeyLayout.diagnostic
+      : chartType === 'chord'
+      ? chordLayout.diagnostic
+      : areaBumpLayout.diagnostic;
+
   const canvasWidth =
-    chartType === 'sankey' ? sankeyLayout.canvasWidth : chordLayout.canvasWidth;
+    chartType === 'sankey'
+      ? sankeyLayout.canvasWidth
+      : chartType === 'chord'
+      ? chordLayout.canvasWidth
+      : areaBumpLayout.canvasWidth;
+
   const canvasHeight =
-    chartType === 'sankey' ? sankeyLayout.canvasHeight : chordLayout.canvasHeight;
+    chartType === 'sankey'
+      ? sankeyLayout.canvasHeight
+      : chartType === 'chord'
+      ? chordLayout.canvasHeight
+      : areaBumpLayout.canvasHeight;
+
   const totalDenominator =
-    chartType === 'sankey' ? sankeyLayout.totalRootInflow : chordLayout.totalFlow;
+    chartType === 'sankey'
+      ? sankeyLayout.totalRootInflow
+      : chartType === 'chord'
+      ? chordLayout.totalFlow
+      : areaBumpLayout.totalLatestFlow;
 
   const selectedNodeEntry: { name: string; color: string } | null =
     chartType === 'sankey'
       ? sankeyLayout.nodes.find((n) => n.name === selectedNodeName) || null
-      : chordLayout.groups.find((g) => g.name === selectedNodeName) || null;
+      : chartType === 'chord'
+      ? chordLayout.groups.find((g) => g.name === selectedNodeName) || null
+      : areaBumpLayout.series.find((s) => s.name === selectedNodeName) || null;
 
   const hoveredSankeyLink: ComputedSankeyLink | null =
     chartType === 'sankey' && hoveredSankeyLinkIdx !== null
@@ -76,7 +102,17 @@ export const SlidePreviewCanvas: React.FC<SlidePreviewCanvasProps> = ({
     hoveredNodeName !== null
       ? chartType === 'sankey'
         ? sankeyLayout.nodes.find((n) => n.name === hoveredNodeName) || null
-        : chordLayout.groups.find((g) => g.name === hoveredNodeName) || null
+        : chartType === 'chord'
+        ? chordLayout.groups.find((g) => g.name === hoveredNodeName) || null
+        : (() => {
+            const found = areaBumpLayout.series.find((s) => s.name === hoveredNodeName);
+            return found ? { name: found.name, color: found.color, value: found.latestValue } : null;
+          })()
+      : null;
+
+  const hoveredBumpSeries: ComputedAreaBumpSeries | null =
+    chartType === 'area-bump' && hoveredNodeName !== null
+      ? areaBumpLayout.series.find((s) => s.name === hoveredNodeName) || null
       : null;
 
   const sankeyLinkOpacity = (link: ComputedSankeyLink): number => {
@@ -102,6 +138,20 @@ export const SlidePreviewCanvas: React.FC<SlidePreviewCanvasProps> = ({
         : ribbon.sourceName === hoveredNodeName || ribbon.targetName === hoveredNodeName;
     return isMatch ? Math.min(0.92, base + 0.25) : Math.max(0.1, base * 0.28);
   };
+
+  const bumpRibbonOpacity = (series: ComputedAreaBumpSeries): number => {
+    const base = Math.min(0.95, Math.max(0.2, style.ribbonOpacity / 100));
+    const focusName = hoveredNodeName ?? selectedNodeName;
+    if (!focusName) return base;
+    return series.name === focusName ? Math.min(0.96, base + 0.22) : Math.max(0.16, base * 0.38);
+  };
+
+  const modeCaption =
+    chartType === 'sankey'
+      ? 'Sankey Flow'
+      : chartType === 'chord'
+      ? 'Chord Matrix'
+      : 'Area Bump Stream';
 
   return (
     <div className="relative flex h-full w-full flex-col items-center justify-center p-6 lg:p-10">
@@ -271,7 +321,7 @@ export const SlidePreviewCanvas: React.FC<SlidePreviewCanvasProps> = ({
                   })}
                 </g>
               </>
-            ) : (
+            ) : chartType === 'chord' ? (
               <>
                 {/* Chord Ribbons */}
                 <g>
@@ -376,6 +426,131 @@ export const SlidePreviewCanvas: React.FC<SlidePreviewCanvasProps> = ({
                   })}
                 </g>
               </>
+            ) : (
+              <>
+                {/* Area Bump Vertical Period Guide Lines & X-Axis Labels */}
+                <g className="pointer-events-none">
+                  {areaBumpLayout.periods.map((period) => (
+                    <g key={`period-axis-${period.name}`}>
+                      <line
+                        x1={period.x}
+                        y1={areaBumpLayout.plotTop - 6}
+                        x2={period.x}
+                        y2={areaBumpLayout.plotBottom + 6}
+                        stroke="#E2E8F0"
+                        strokeWidth={1}
+                      />
+                      <text
+                        x={period.x}
+                        y={areaBumpLayout.plotBottom + 22}
+                        textAnchor="middle"
+                        fontSize={11}
+                        fontWeight={600}
+                        fill="#475569"
+                        className="sankey-value"
+                      >
+                        {period.name}
+                      </text>
+                    </g>
+                  ))}
+                </g>
+
+                {/* Area Bump Rank-Stream Ribbons */}
+                <g>
+                  {areaBumpLayout.series.map((s) => {
+                    const isSelected = s.name === selectedNodeName;
+                    const pathD = buildAreaBumpSvgPath(s);
+                    if (!pathD) return null;
+
+                    return (
+                      <g
+                        key={`bump-series-${s.name}`}
+                        className="cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectNode(isSelected ? null : s.name);
+                        }}
+                        onMouseEnter={() => setHoveredNodeName(s.name)}
+                        onMouseLeave={() => setHoveredNodeName(null)}
+                      >
+                        <path
+                          d={pathD}
+                          fill={s.color}
+                          fillOpacity={bumpRibbonOpacity(s)}
+                          stroke={isSelected ? '#0F172A' : '#FFFFFF'}
+                          strokeWidth={isSelected ? 1.85 : 1.25}
+                          strokeLinejoin="round"
+                          className="transition-opacity duration-150"
+                        />
+                      </g>
+                    );
+                  })}
+                </g>
+
+                {/* Area Bump Left & Right Labels */}
+                <g className="pointer-events-none">
+                  {areaBumpLayout.series.map((s) => {
+                    const firstPt = s.points[s.firstActiveIndex];
+                    const lastPt = s.points[s.lastActiveIndex];
+                    const formattedLatest = formatSankeyValue(
+                      s.latestValue,
+                      style.numberFormat,
+                      areaBumpLayout.totalLatestFlow
+                    );
+
+                    return (
+                      <g key={`bump-labels-${s.name}`}>
+                        {style.bumpShowLeftLabels && firstPt && (
+                          <text
+                            x={firstPt.x - 10}
+                            y={firstPt.yMid + 4}
+                            textAnchor="end"
+                            fontSize={style.fontSize}
+                            fontWeight={600}
+                            fill="#0F172A"
+                          >
+                            <tspan fill="#64748B" fontSize={Math.max(8.5, style.fontSize - 1.5)}>
+                              #{s.firstRank}{' '}
+                            </tspan>
+                            {s.name}
+                          </text>
+                        )}
+
+                        {lastPt && (
+                          <g>
+                            <text
+                              x={lastPt.x + 10}
+                              y={style.showValues ? lastPt.yMid - 1.5 : lastPt.yMid + 4}
+                              textAnchor="start"
+                              fontSize={style.fontSize}
+                              fontWeight={600}
+                              fill="#0F172A"
+                            >
+                              <tspan fill="#64748B" fontSize={Math.max(8.5, style.fontSize - 1.5)}>
+                                #{s.latestRank}{' '}
+                              </tspan>
+                              {s.name}
+                            </text>
+                            {style.showValues && (
+                              <text
+                                x={lastPt.x + 10}
+                                y={lastPt.yMid + style.fontSize * 0.95}
+                                textAnchor="start"
+                                fontSize={Math.max(8, style.fontSize - 1.5)}
+                                fontWeight={500}
+                                fill="#475569"
+                                className="sankey-value"
+                              >
+                                {formattedLatest}
+                              </text>
+                            )}
+                          </g>
+                        )}
+                      </g>
+                    );
+                  })}
+                </g>
+              </>
             )}
           </svg>
         )}
@@ -465,84 +640,109 @@ export const SlidePreviewCanvas: React.FC<SlidePreviewCanvasProps> = ({
         )}
 
         {/* Subtle Hover Inspection Bar */}
-        {(hoveredSankeyLink || hoveredChordRibbon || hoveredNode) && !selectedNodeEntry && (
-          <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex items-center gap-2 rounded-md border border-slate-200 bg-white/95 px-2.5 py-1.5 text-xs text-slate-800 shadow-sm tabular-nums">
-            {hoveredSankeyLink ? (
-              <>
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
-                  style={{ backgroundColor: hoveredSankeyLink.color }}
-                />
-                <span className="font-medium">
-                  {hoveredSankeyLink.sourceName} &rarr; {hoveredSankeyLink.targetName}
-                </span>
-                <span className="text-slate-300" aria-hidden="true">·</span>
-                <span className="font-mono font-medium text-slate-900">
-                  {formatSankeyValue(
-                    hoveredSankeyLink.value,
-                    style.numberFormat,
-                    totalDenominator
-                  )}
-                </span>
-                {style.numberFormat !== 'percent' && (
-                  <>
-                    <span className="text-slate-300" aria-hidden="true">·</span>
-                    <span className="font-mono text-slate-500">
-                      {((hoveredSankeyLink.value / Math.max(totalDenominator, 1)) * 100).toFixed(1)}%
-                    </span>
-                  </>
-                )}
-              </>
-            ) : hoveredChordRibbon ? (
-              <>
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
-                  style={{ backgroundColor: hoveredChordRibbon.color }}
-                />
-                <span className="font-medium">
-                  {hoveredChordRibbon.sourceName} &rarr; {hoveredChordRibbon.targetName}
-                </span>
-                <span className="text-slate-300" aria-hidden="true">·</span>
-                <span className="font-mono font-medium text-slate-900">
-                  {formatSankeyValue(
-                    hoveredChordRibbon.sourceValue,
-                    style.numberFormat,
-                    totalDenominator
-                  )}
-                </span>
-                {!style.chordDirected && hoveredChordRibbon.targetValue > 0 && (
-                  <>
-                    <span className="text-slate-300" aria-hidden="true">·</span>
-                    <span className="text-slate-500">
-                      return:{' '}
-                      <span className="font-mono text-slate-800">
-                        {formatSankeyValue(
-                          hoveredChordRibbon.targetValue,
-                          style.numberFormat,
-                          totalDenominator
-                        )}
+        {(hoveredSankeyLink || hoveredChordRibbon || hoveredBumpSeries || hoveredNode) &&
+          !selectedNodeEntry && (
+            <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex items-center gap-2 rounded-md border border-slate-200 bg-white/95 px-2.5 py-1.5 text-xs text-slate-800 shadow-sm tabular-nums">
+              {hoveredSankeyLink ? (
+                <>
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                    style={{ backgroundColor: hoveredSankeyLink.color }}
+                  />
+                  <span className="font-medium">
+                    {hoveredSankeyLink.sourceName} &rarr; {hoveredSankeyLink.targetName}
+                  </span>
+                  <span className="text-slate-300" aria-hidden="true">·</span>
+                  <span className="font-mono font-medium text-slate-900">
+                    {formatSankeyValue(
+                      hoveredSankeyLink.value,
+                      style.numberFormat,
+                      totalDenominator
+                    )}
+                  </span>
+                  {style.numberFormat !== 'percent' && (
+                    <>
+                      <span className="text-slate-300" aria-hidden="true">·</span>
+                      <span className="font-mono text-slate-500">
+                        {((hoveredSankeyLink.value / Math.max(totalDenominator, 1)) * 100).toFixed(1)}%
                       </span>
-                    </span>
-                  </>
-                )}
-              </>
-            ) : hoveredNode ? (
-              <>
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
-                  style={{ backgroundColor: hoveredNode.color }}
-                />
-                <span className="font-medium">{hoveredNode.name}</span>
-                <span className="text-slate-300" aria-hidden="true">·</span>
-                <span className="font-mono font-medium text-slate-900">
-                  {formatSankeyValue(hoveredNode.value, style.numberFormat, totalDenominator)}
-                </span>
-                <span className="text-slate-300" aria-hidden="true">·</span>
-                <span className="text-[11px] text-slate-500">Click to recolour</span>
-              </>
-            ) : null}
-          </div>
-        )}
+                    </>
+                  )}
+                </>
+              ) : hoveredChordRibbon ? (
+                <>
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                    style={{ backgroundColor: hoveredChordRibbon.color }}
+                  />
+                  <span className="font-medium">
+                    {hoveredChordRibbon.sourceName} &rarr; {hoveredChordRibbon.targetName}
+                  </span>
+                  <span className="text-slate-300" aria-hidden="true">·</span>
+                  <span className="font-mono font-medium text-slate-900">
+                    {formatSankeyValue(
+                      hoveredChordRibbon.sourceValue,
+                      style.numberFormat,
+                      totalDenominator
+                    )}
+                  </span>
+                  {!style.chordDirected && hoveredChordRibbon.targetValue > 0 && (
+                    <>
+                      <span className="text-slate-300" aria-hidden="true">·</span>
+                      <span className="text-slate-500">
+                        return:{' '}
+                        <span className="font-mono text-slate-800">
+                          {formatSankeyValue(
+                            hoveredChordRibbon.targetValue,
+                            style.numberFormat,
+                            totalDenominator
+                          )}
+                        </span>
+                      </span>
+                    </>
+                  )}
+                </>
+              ) : hoveredBumpSeries ? (
+                <>
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                    style={{ backgroundColor: hoveredBumpSeries.color }}
+                  />
+                  <span className="font-medium">{hoveredBumpSeries.name}</span>
+                  <span className="text-slate-300" aria-hidden="true">·</span>
+                  <span className="font-mono text-slate-700">
+                    #{hoveredBumpSeries.firstRank} &rarr; #{hoveredBumpSeries.latestRank}
+                  </span>
+                  <span className="text-slate-300" aria-hidden="true">·</span>
+                  <span className="font-mono font-medium text-slate-900">
+                    {formatSankeyValue(
+                      hoveredBumpSeries.latestValue,
+                      style.numberFormat,
+                      totalDenominator
+                    )}
+                  </span>
+                  <span className="text-slate-300" aria-hidden="true">·</span>
+                  <span className="font-mono text-slate-500">
+                    {(hoveredBumpSeries.latestShare * 100).toFixed(1)}%
+                  </span>
+                </>
+              ) : hoveredNode ? (
+                <>
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                    style={{ backgroundColor: hoveredNode.color }}
+                  />
+                  <span className="font-medium">{hoveredNode.name}</span>
+                  <span className="text-slate-300" aria-hidden="true">·</span>
+                  <span className="font-mono font-medium text-slate-900">
+                    {formatSankeyValue(hoveredNode.value, style.numberFormat, totalDenominator)}
+                  </span>
+                  <span className="text-slate-300" aria-hidden="true">·</span>
+                  <span className="text-[11px] text-slate-500">Click to recolour</span>
+                </>
+              ) : null}
+            </div>
+          )}
       </div>
 
       {/* Quiet Canvas Caption */}
@@ -551,9 +751,7 @@ export const SlidePreviewCanvas: React.FC<SlidePreviewCanvasProps> = ({
           {aspectRatio === '16:9' ? '16:9 Widescreen (13.33" × 7.5")' : '4:3 Standard (10.0" × 7.5")'}
         </span>
         <span aria-hidden="true">·</span>
-        <span>
-          {chartType === 'sankey' ? 'Sankey Flow' : 'Chord Matrix'}
-        </span>
+        <span>{modeCaption}</span>
         <span aria-hidden="true">·</span>
         <span>Click slide title to edit or click any node to recolour</span>
       </div>

@@ -1,8 +1,10 @@
 import PptxGenJS from 'pptxgenjs';
+import { buildAreaBumpPptxShape } from './areaBumpMath';
 import { buildChordGroupPptxShape, buildChordRibbonPptxShape } from './chordMath';
 import { stripHash } from './palettes';
 import { formatSankeyValue, getSlideCanvasDimensions } from './sankeyMath';
 import {
+  AreaBumpLayoutResult,
   AspectRatio,
   ChordLayoutResult,
   SankeyLayoutResult,
@@ -347,3 +349,178 @@ export async function exportChordToPptx(
 
   await pptx.writeFile({ fileName: sanitizeFileName(style.title, 'chord-diagram') });
 }
+
+export async function exportAreaBumpToPptx(
+  layout: AreaBumpLayoutResult,
+  aspectRatio: AspectRatio,
+  style: SankeyStyleConfig
+): Promise<void> {
+  if (layout.diagnostic || layout.series.length === 0) {
+    throw new Error('Cannot export PPTX while diagram data is empty or contains errors.');
+  }
+
+  const pptx = new PptxGenJS();
+  pptx.layout = aspectRatio === '16:9' ? 'LAYOUT_WIDE' : 'LAYOUT_4x3';
+  pptx.author = 'SankeyStudio';
+  pptx.title = style.title || 'Area Bump Chart';
+
+  const slide = pptx.addSlide();
+  slide.background = { color: 'FFFFFF' };
+
+  const { inchesWidth } = getSlideCanvasDimensions(aspectRatio);
+  addSlideHeader(slide, inchesWidth, style);
+
+  const topIn = toInches(layout.plotTop - 6);
+  const bottomIn = toInches(layout.plotBottom + 6);
+  const lineH = Math.max(0.1, Number((bottomIn - topIn).toFixed(4)));
+
+  // 1. Vertical Period Guide Lines & X-Axis Labels
+  for (const period of layout.periods) {
+    const px = toInches(period.x);
+
+    slide.addShape(pptx.ShapeType.line, {
+      x: px,
+      y: topIn,
+      w: 0,
+      h: lineH,
+      line: { color: 'E2E8F0', width: 0.75 },
+    });
+
+    slide.addText(period.name, {
+      x: Number(Math.max(0.05, px - 0.5).toFixed(4)),
+      y: Number((bottomIn + 0.06).toFixed(4)),
+      w: 1.0,
+      h: 0.25,
+      align: 'center',
+      fontSize: 10,
+      bold: true,
+      fontFace: 'Arial',
+      color: '475569',
+      margin: 0,
+    });
+  }
+
+  // 2. Series Rank-Stream Ribbons as Native custGeom Shapes
+  const ribbonTransparency = Math.max(0, Math.min(95, 100 - style.ribbonOpacity));
+
+  for (const s of layout.series) {
+    const geom = buildAreaBumpPptxShape(s);
+    if (!geom) continue;
+
+    slide.addShape('custGeom' as PptxGenJS.SHAPE_NAME, {
+      x: geom.x,
+      y: geom.y,
+      w: geom.w,
+      h: geom.h,
+      fill: {
+        color: stripHash(s.color),
+        transparency: ribbonTransparency,
+      },
+      line: { color: 'FFFFFF', width: 1.0 },
+      points: geom.points,
+    });
+  }
+
+  // 3. Left Start Labels & Right End Labels as Native Text Boxes
+  const nameFontPt = Math.max(8, Math.min(18, style.fontSize));
+  const valueFontPt = Math.max(7.5, nameFontPt - 1.5);
+  const leftLabelW = 1.65;
+  const rightLabelW = 2.0;
+  const labelBoxH = 0.44;
+
+  for (const s of layout.series) {
+    const firstPt = s.points[s.firstActiveIndex];
+    const lastPt = s.points[s.lastActiveIndex];
+
+    if (style.bumpShowLeftLabels && firstPt) {
+      const lx = Math.max(0.08, toInches(firstPt.x) - leftLabelW - 0.12);
+      const ly = Math.max(0.1, toInches(firstPt.yMid) - labelBoxH / 2);
+
+      slide.addText(
+        [
+          {
+            text: `#${s.firstRank} `,
+            options: {
+              bold: true,
+              fontSize: Math.max(7.5, nameFontPt - 1),
+              fontFace: 'Arial',
+              color: '64748B',
+            },
+          },
+          {
+            text: s.name,
+            options: {
+              bold: true,
+              fontSize: nameFontPt,
+              fontFace: 'Arial',
+              color: '0F172A',
+            },
+          },
+        ],
+        {
+          x: Number(lx.toFixed(4)),
+          y: Number(ly.toFixed(4)),
+          w: leftLabelW,
+          h: labelBoxH,
+          align: 'right',
+          valign: 'middle',
+          margin: 0,
+          wrap: true,
+        }
+      );
+    }
+
+    if (lastPt) {
+      const rx = Math.min(inchesWidth - rightLabelW - 0.08, toInches(lastPt.x) + 0.12);
+      const ry = Math.max(0.1, toInches(lastPt.yMid) - labelBoxH / 2);
+
+      const rightRuns: PptxGenJS.TextProps[] = [
+        {
+          text: `#${s.latestRank} `,
+          options: {
+            bold: true,
+            fontSize: Math.max(7.5, nameFontPt - 1),
+            fontFace: 'Arial',
+            color: '64748B',
+          },
+        },
+        {
+          text: s.name,
+          options: {
+            bold: true,
+            fontSize: nameFontPt,
+            fontFace: 'Arial',
+            color: '0F172A',
+            breakLine: style.showValues,
+          },
+        },
+      ];
+
+      if (style.showValues) {
+        rightRuns.push({
+          text: formatSankeyValue(s.latestValue, style.numberFormat, layout.totalLatestFlow),
+          options: {
+            bold: false,
+            fontSize: valueFontPt,
+            fontFace: 'Arial',
+            color: '475569',
+          },
+        });
+      }
+
+      slide.addText(rightRuns, {
+        x: Number(rx.toFixed(4)),
+        y: Number(ry.toFixed(4)),
+        w: rightLabelW,
+        h: labelBoxH,
+        align: 'left',
+        valign: 'middle',
+        margin: 0,
+        wrap: true,
+      });
+    }
+  }
+
+  await pptx.writeFile({ fileName: sanitizeFileName(style.title, 'area-bump-chart') });
+}
+
